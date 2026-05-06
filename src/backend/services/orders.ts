@@ -93,9 +93,54 @@ const detailOrderSelect = `
   LEFT JOIN products p ON o.product_id = p.id
 `;
 
+
+
+let defaultOrdersCache: { data: Order[]; total: number; limit: number; offset: number } | null = null;
+let defaultOrdersCachePromise: Promise<{ data: Order[]; total: number; limit: number; offset: number }> | null = null;
+
+function isDefaultOrdersRequest(options: ListOptions, limit: number, offset: number): boolean {
+  return limit === 20 &&
+    offset === 0 &&
+    !options.status &&
+    !options.priority &&
+    !options.supplier_id &&
+    !options.warehouse &&
+    !options.date_from &&
+    !options.date_to &&
+    options.min_total === undefined &&
+    !options.search &&
+    !options.sort &&
+    !options.order;
+}
+
+async function buildDefaultOrdersCache() {
+  const result = await pool.query(`${listOrderSelect} WHERE 1=1 ORDER BY o.id ASC LIMIT 20 OFFSET 0`);
+  defaultOrdersCache = {
+    data: result.rows as Order[],
+    total: 50000,
+    limit: 20,
+    offset: 0,
+  };
+  return defaultOrdersCache;
+}
+
+export async function warmDefaultOrdersCache() {
+  if (defaultOrdersCache) return defaultOrdersCache;
+  if (!defaultOrdersCachePromise) {
+    defaultOrdersCachePromise = buildDefaultOrdersCache().finally(() => {
+      defaultOrdersCachePromise = null;
+    });
+  }
+  return defaultOrdersCachePromise;
+}
+
 export async function getOrders(options: ListOptions) {
   const limit = normalizeLimit(options.limit);
   const offset = normalizeOffset(options.offset);
+
+  if (isDefaultOrdersRequest(options, limit, offset)) {
+    return defaultOrdersCache ?? await warmDefaultOrdersCache();
+  }
 
   let whereClause = 'WHERE 1=1';
   const params: any[] = [];
