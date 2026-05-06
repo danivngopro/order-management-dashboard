@@ -82,3 +82,5 @@ CREATE INDEX idx_orders_status_created_at ON orders(status, created_at);
 CREATE INDEX idx_orders_supplier_status ON orders(supplier_id, status);
 CREATE INDEX idx_products_category_id ON products(category_id);
 CREATE INDEX idx_suppliers_active ON suppliers(active);
+
+CREATE INDEX idx_products_name_lower ON products (LOWER(name));
