@@ -3,7 +3,7 @@ import pool from './db/pool.js';
 
 export const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 // Health check
 app.get('/health', async (req: Request, res: Response) => {
@@ -61,5 +61,14 @@ app.use((req: Request, res: Response) => {
 // Error handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('Error:', err);
+
+  if (err?.type === 'entity.too.large') {
+    return res.status(400).json({ error: 'Request body too large', code: 'BAD_REQUEST' });
+  }
+
+  if (err instanceof SyntaxError || err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Invalid JSON body', code: 'BAD_REQUEST' });
+  }
+
   res.status(500).json({ error: 'Internal server error', code: 'INTERNAL_ERROR' });
 });

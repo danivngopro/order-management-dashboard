@@ -33,7 +33,7 @@ export async function getAnomalies(): Promise<Anomaly[]> {
       SELECT
         b.order_id,
         CASE
-          WHEN sr.supplier_id IS NOT NULL AND array_length(b.initial_types, 1) > 0 THEN b.initial_types || 'risky_supplier'
+          WHEN sr.supplier_id IS NOT NULL AND array_length(b.initial_types, 1) > 0 THEN b.initial_types || ARRAY['risky_supplier']::text[]
           WHEN sr.supplier_id IS NOT NULL THEN ARRAY['risky_supplier']::text[]
           ELSE b.initial_types
         END AS anomaly_types
