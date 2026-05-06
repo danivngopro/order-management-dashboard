@@ -42,6 +42,7 @@ CREATE TABLE orders (
   unit_price NUMERIC NOT NULL,
   total_price NUMERIC NOT NULL,
   status TEXT NOT NULL,
+  initial_status TEXT NOT NULL,
   priority TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL,
@@ -72,6 +73,7 @@ CREATE TABLE bulk_job_items (
 
 -- Indexes
 CREATE INDEX idx_orders_status ON orders(status);
+CREATE INDEX idx_orders_initial_status ON orders(initial_status);
 CREATE INDEX idx_orders_priority ON orders(priority);
 CREATE INDEX idx_orders_supplier_id ON orders(supplier_id);
 CREATE INDEX idx_orders_warehouse ON orders(warehouse);

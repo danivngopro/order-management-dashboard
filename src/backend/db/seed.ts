@@ -166,8 +166,8 @@ async function importOrders() {
 }
 
 async function insertOrders(records: any[]) {
-  const query = `INSERT INTO orders (id, supplier_id, product_id, quantity, unit_price, total_price, status, priority, created_at, updated_at, warehouse, notes, version) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`;
+  const query = `INSERT INTO orders (id, supplier_id, product_id, quantity, unit_price, total_price, status, initial_status, priority, created_at, updated_at, warehouse, notes, version) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`;
   for (const row of records) {
     const warehouse = row.warehouse ? (row.warehouse.trim() === '' ? null : row.warehouse) : null;
     const notes = row.notes ? (row.notes.trim() === '' ? null : row.notes) : null;
@@ -178,6 +178,7 @@ async function insertOrders(records: any[]) {
       parseInt(row.quantity),
       parseFloat(row.unit_price),
       parseFloat(row.total_price),
+      row.status,
       row.status,
       row.priority,
       row.created_at,

@@ -199,9 +199,9 @@ export async function getOrderStats() {
   const stats = statsResult.rows[0];
 
   const byStatusResult = await pool.query(`
-    SELECT status, COUNT(*)::int AS count, COALESCE(SUM(total_price), 0)::float8 AS total_value
+    SELECT initial_status AS status, COUNT(*)::int AS count, COALESCE(SUM(total_price), 0)::float8 AS total_value
     FROM orders
-    GROUP BY status
+    GROUP BY initial_status
   `);
   const by_status: Record<string, { count: number; total_value: number }> = {};
   for (const row of byStatusResult.rows) {
