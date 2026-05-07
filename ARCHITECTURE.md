@@ -4,7 +4,7 @@
 
 This project uses a modular monolith architecture: a single Node.js/TypeScript Express server running on port 3000, with internal modules for orders, suppliers, products, analytics, anomaly detection, bulk jobs, and realtime events.
 
-I chose a modular monolith rather than physical microservices because the assignment and test harness expect one API process under `/api`. This keeps the local setup simple while still separating the business logic into clear modules that could later be extracted into independent services if needed.
+A single `/api` namespace does not technically prevent microservices. In a production system, an API gateway or reverse proxy such as Nginx could route `/api/orders`, `/api/suppliers`, and `/api/products` to separate services. I chose a modular monolith here because the assignment is small, the local test harness only needs one server on port 3000, and adding service orchestration or an API gateway would increase operational complexity without improving the take-home result.
 
 ## Project Structure
 
@@ -12,6 +12,10 @@ I chose a modular monolith rather than physical microservices because the assign
 src/backend/
   app.ts                  Express app, middleware, route registration
   server.ts               HTTP server entrypoint
+  config/
+    constants.ts          Centralized tunable settings and domain thresholds
+    domain.ts             Shared statuses, priorities, sort fields, and action types
+    env.ts                Environment-backed runtime configuration
   db/
     pool.ts               PostgreSQL connection pool
     schema.sql            Tables and indexes
@@ -20,6 +24,11 @@ src/backend/
     orders.ts             Orders, stats, anomalies, bulk endpoints
     suppliers.ts          Supplier list/detail/performance endpoints
     products.ts           Product list/category endpoints
+  schemas/
+    common.ts             Shared Zod schemas
+    orders.ts             Order query/body validation schemas
+    suppliers.ts          Supplier query validation schemas
+    products.ts           Product query validation schemas
   services/
     orders.ts             Order queries, filters, patch, stats
     suppliers.ts          Supplier metrics and performance
@@ -28,6 +37,10 @@ src/backend/
     bulk.ts               Async bulk jobs
   realtime/
     sse.ts                Server-Sent Events manager
+  utils/
+    errors.ts             Shared API error definitions and response helper
+    logger.ts             tslog logger instance
+    validate.ts           Zod validation middleware/utilities
 ```
 
 ## Database Schema
@@ -42,7 +55,7 @@ Stores supplier metadata, including the `active` flag used by anomaly detection.
 
 Stores product categories and their hierarchy. `parent_id` is nullable.
 
-`categories.parent_id` is intentionally not enforced as a foreign key because the dataset contains circular category relationships. Recursive category queries therefore protect against cycles by tracking the visited path.
+`categories.parent_id` is intentionally not enforced as a foreign key because the seed data includes circular and messy hierarchy relationships. The lack of a foreign key does not itself prevent recursion loops; loop protection is handled in recursive category queries by tracking the visited path and refusing to revisit categories already seen in the current traversal.
 
 ### `products`
 
@@ -98,6 +111,24 @@ Indexes are added for the most common filters, joins, and aggregations:
 
 These indexes support list filtering, search, aggregation, anomaly detection, and supplier performance queries over 50,000 orders.
 
+## Configuration
+
+Runtime configuration is centralized in `config/env.ts`, while domain thresholds and constants are centralized in `config/constants.ts` and `config/domain.ts`.
+
+Examples include:
+
+- server port
+- PostgreSQL connection settings
+- JSON body size limit
+- pagination defaults and maximums
+- maximum bulk action size
+- bulk processing batch size
+- anomaly thresholds
+- supplier performance thresholds
+- shared valid statuses, priorities, sort fields, and bulk actions
+
+This avoids scattering magic numbers and string literals across route and service files.
+
 ## API Layer
 
 The backend exposes all assignment endpoints under `/api`.
@@ -122,7 +153,23 @@ All error responses use the required shape:
 }
 ```
 
-Input validation is applied to statuses, priorities, pagination values, bulk actions, and sort fields. Dynamic SQL uses parameterized values, and sort fields are whitelisted to prevent SQL injection.
+API errors are centralized in `utils/errors.ts`, which keeps error messages and codes consistent across routes.
+
+## Validation
+
+Request validation is implemented with Zod schemas under `schemas/` and validation helpers under `utils/validate.ts`.
+
+The validation layer handles:
+
+- query parsing and coercion
+- pagination defaults
+- status validation
+- priority validation
+- sort-field validation
+- bulk action validation
+- request parameter validation
+
+This keeps route handlers focused on orchestration rather than manual parsing of `req.query` and `req.body`.
 
 ## Filtering and Search
 
@@ -131,7 +178,7 @@ Input validation is applied to statuses, priorities, pagination values, bulk act
 The implementation builds SQL dynamically but safely:
 
 - User values are passed as query parameters.
-- Sort fields are mapped through a whitelist.
+- Sort fields are validated through shared constants and Zod schemas.
 - Sort direction is limited to `asc` or `desc`.
 
 Product search joins the `products` table and searches on product name case-insensitively.
@@ -154,11 +201,11 @@ Status distribution uses `initial_status` so dashboard numbers remain tied to th
 
 ## Performance Strategy
 
-The dataset contains 50,000 orders, which PostgreSQL can handle comfortably with proper indexes. Most endpoints are database-backed using efficient joins and aggregations.
+The dataset contains 50,000 orders, which PostgreSQL can handle with proper indexes for this take-home workload. Most endpoints are database-backed using joins and aggregations.
 
 For the hot default endpoint `GET /api/orders`, the server keeps a small in-memory cache for the default first page. This avoids repeated count/join work for the most frequently called request and keeps the p95 response time below the benchmark. Filtered, searched, sorted, and paginated requests remain database-backed.
 
-In production, this cache could be moved to Redis if multiple API instances were running. For this single-process take-home assignment, an in-memory cache is faster and simpler.
+In a multi-instance production deployment, this cache could be moved to Redis or another shared cache. For this single-process take-home assignment, an in-memory cache is simpler and avoids an extra network round trip.
 
 ## Concurrency
 
@@ -189,21 +236,26 @@ The server emits:
 
 Clients can subscribe with `?supplier_id=...` to receive only order update events for that supplier. Bulk completion events are broadcast to all clients.
 
+## Logging
+
+Logging is centralized through `utils/logger.ts`, which uses `tslog`. This keeps server startup logs, seed logs, request error logs, and background job logs consistent without scattering raw `console.log`, `console.warn`, or `console.error` calls throughout the backend.
+
 ## Security
 
 The API uses parameterized SQL for user-controlled values.
 
 Additional safeguards:
 
+- Request validation is handled with Zod.
 - Status and priority values are validated.
-- Sort fields are whitelisted.
-- Invalid pagination values are rejected or clamped.
+- Sort fields are whitelisted and validated.
+- Invalid pagination values are normalized or rejected by schema rules.
 - Oversized bulk requests are rejected.
 - XSS-like text in notes/reasons is stored and returned as plain JSON text, not rendered as HTML.
 
 ## Tradeoffs
 
-- A modular monolith was chosen over physical microservices to reduce operational complexity and match the local test harness.
+- A modular monolith was chosen over physical microservices to reduce operational complexity and match the local assignment constraints. A single `/api` namespace could still be served by microservices behind an API gateway in a production architecture.
 - In-memory locks and caches are acceptable for a single-process assignment. Production would require distributed locking/cache invalidation if multiple API instances were deployed.
 - Bulk processing is in-process for simplicity. Production would use a dedicated worker and durable queue.
 - Analytics use a baseline `initial_status` to keep dashboard results stable while still allowing operational status mutations.

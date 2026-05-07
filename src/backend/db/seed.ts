@@ -2,38 +2,38 @@ import { createReadStream } from 'fs';
 import { parse } from 'csv-parse';
 import { readFileSync } from 'fs';
 import pool from './pool.js';
-
-const CHUNK_SIZE = 500;
+import { IMPORT } from '../config/constants.js';
+import { logger } from '../utils/logger.js';
 
 async function seedDatabase() {
   try {
-    console.log('Seeding database...');
+    logger.info('Seeding database...');
 
     // Execute schema
-    console.log('Executing schema...');
+    logger.info('Executing schema...');
     const schema = readFileSync(new URL('./schema.sql', import.meta.url), 'utf-8');
     await pool.query(schema);
 
     // Import categories
-    console.log('Importing categories...');
+    logger.info('Importing categories...');
     await importCategories();
 
     // Import suppliers
-    console.log('Importing suppliers...');
+    logger.info('Importing suppliers...');
     await importSuppliers();
 
     // Import products
-    console.log('Importing products...');
+    logger.info('Importing products...');
     await importProducts();
 
     // Import orders
-    console.log('Importing orders...');
+    logger.info('Importing orders...');
     await importOrders();
 
-    console.log('Seeding complete!');
+    logger.info('Seeding complete!');
     await pool.end();
   } catch (err) {
-    console.error('Seeding failed:', err);
+    logger.error('Seeding failed', { err });
     await pool.end();
     process.exit(1);
   }
@@ -49,8 +49,8 @@ async function importCategories() {
       })
       .on('end', async () => {
         try {
-          for (let i = 0; i < records.length; i += CHUNK_SIZE) {
-            const chunk = records.slice(i, i + CHUNK_SIZE);
+          for (let i = 0; i < records.length; i += IMPORT.CHUNK_SIZE) {
+            const chunk = records.slice(i, i + IMPORT.CHUNK_SIZE);
             await insertCategories(chunk);
           }
           resolve(null);
@@ -80,8 +80,8 @@ async function importSuppliers() {
       })
       .on('end', async () => {
         try {
-          for (let i = 0; i < records.length; i += CHUNK_SIZE) {
-            const chunk = records.slice(i, i + CHUNK_SIZE);
+          for (let i = 0; i < records.length; i += IMPORT.CHUNK_SIZE) {
+            const chunk = records.slice(i, i + IMPORT.CHUNK_SIZE);
             await insertSuppliers(chunk);
           }
           resolve(null);
@@ -121,8 +121,8 @@ async function importProducts() {
       })
       .on('end', async () => {
         try {
-          for (let i = 0; i < records.length; i += CHUNK_SIZE) {
-            const chunk = records.slice(i, i + CHUNK_SIZE);
+          for (let i = 0; i < records.length; i += IMPORT.CHUNK_SIZE) {
+            const chunk = records.slice(i, i + IMPORT.CHUNK_SIZE);
             await insertProducts(chunk);
           }
           resolve(null);
@@ -152,8 +152,8 @@ async function importOrders() {
       })
       .on('end', async () => {
         try {
-          for (let i = 0; i < records.length; i += CHUNK_SIZE) {
-            const chunk = records.slice(i, i + CHUNK_SIZE);
+          for (let i = 0; i < records.length; i += IMPORT.CHUNK_SIZE) {
+            const chunk = records.slice(i, i + IMPORT.CHUNK_SIZE);
             await insertOrders(chunk);
           }
           resolve(null);

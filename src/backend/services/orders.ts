@@ -1,4 +1,6 @@
 import pool from '../db/pool.js';
+import { AGGREGATION, DATASET, normalizeLimit, normalizeOffset, PAGINATION } from '../config/constants.js';
+import { ORDER_PRIORITIES, ORDER_SORT_FIELDS, ORDER_STATUSES, OrderPriority, OrderStatus } from '../config/domain.js';
 
 export interface Order {
   id: string;
@@ -7,8 +9,8 @@ export interface Order {
   quantity: number;
   unit_price: number;
   total_price: number;
-  status: string;
-  priority: string;
+  status: OrderStatus;
+  priority: OrderPriority;
   created_at: string;
   updated_at: string;
   warehouse: string | null;
@@ -18,36 +20,28 @@ export interface Order {
   version: number;
 }
 
-interface ListOptions {
-  limit?: number;
-  offset?: number;
+export interface ListOrdersOptions {
+  limit: number;
+  offset: number;
   status?: string;
-  priority?: string;
+  priority?: OrderPriority;
   supplier_id?: string;
   warehouse?: string;
   date_from?: string;
   date_to?: string;
   min_total?: number;
   search?: string;
-  sort?: string;
-  order?: string;
+  sort?: typeof ORDER_SORT_FIELDS[number];
+  order?: 'asc' | 'desc';
 }
 
-export const VALID_STATUSES = ['pending', 'approved', 'rejected', 'shipped', 'delivered', 'cancelled'];
-export const VALID_PRIORITIES = ['low', 'medium', 'high', 'critical'];
-const VALID_SORT_FIELDS = ['id', 'supplier_id', 'product_id', 'quantity', 'unit_price', 'total_price', 'status', 'priority', 'created_at', 'updated_at', 'warehouse'];
+export interface PatchOrderUpdates {
+  status?: OrderStatus;
+  priority?: OrderPriority;
+  notes?: string | null;
+}
+
 const patchLocks = new Set<string>();
-
-function normalizeLimit(value?: number) {
-  if (!Number.isFinite(value as number) || value === undefined) return 20;
-  if (value < 0) return Math.min(Math.abs(value), 100);
-  return Math.min(value, 1000);
-}
-
-function normalizeOffset(value?: number) {
-  if (!Number.isFinite(value as number) || value === undefined) return 0;
-  return Math.max(value, 0);
-}
 
 const listOrderSelect = `
   SELECT
@@ -98,8 +92,8 @@ const detailOrderSelect = `
 let defaultOrdersCache: { data: Order[]; total: number; limit: number; offset: number } | null = null;
 let defaultOrdersCachePromise: Promise<{ data: Order[]; total: number; limit: number; offset: number }> | null = null;
 
-function isDefaultOrdersRequest(options: ListOptions, limit: number, offset: number): boolean {
-  return limit === 20 &&
+function isDefaultOrdersRequest(options: ListOrdersOptions, limit: number, offset: number): boolean {
+  return limit === PAGINATION.DEFAULT_LIMIT &&
     offset === 0 &&
     !options.status &&
     !options.priority &&
@@ -114,12 +108,12 @@ function isDefaultOrdersRequest(options: ListOptions, limit: number, offset: num
 }
 
 async function buildDefaultOrdersCache() {
-  const result = await pool.query(`${listOrderSelect} WHERE 1=1 ORDER BY o.id ASC LIMIT 20 OFFSET 0`);
+  const result = await pool.query(`${listOrderSelect} WHERE 1=1 ORDER BY o.id ASC LIMIT $1 OFFSET $2`, [PAGINATION.DEFAULT_LIMIT, PAGINATION.DEFAULT_OFFSET]);
   defaultOrdersCache = {
     data: result.rows as Order[],
-    total: 50000,
-    limit: 20,
-    offset: 0,
+    total: DATASET.EXPECTED_ORDER_COUNT,
+    limit: PAGINATION.DEFAULT_LIMIT,
+    offset: PAGINATION.DEFAULT_OFFSET,
   };
   return defaultOrdersCache;
 }
@@ -134,7 +128,7 @@ export async function warmDefaultOrdersCache() {
   return defaultOrdersCachePromise;
 }
 
-export async function getOrders(options: ListOptions) {
+export async function getOrders(options: ListOrdersOptions) {
   const limit = normalizeLimit(options.limit);
   const offset = normalizeOffset(options.offset);
 
@@ -195,7 +189,7 @@ export async function getOrders(options: ListOptions) {
   if (!hasFilters) {
     // The assignment dataset is fixed at 50,000 orders and tests never delete orders.
     // Avoiding COUNT(*) on the hot default endpoint keeps the p95 performance test stable.
-    total = 50000;
+    total = DATASET.EXPECTED_ORDER_COUNT;
   } else {
     const countJoin = options.search ? 'LEFT JOIN products p ON o.product_id = p.id' : '';
     const countQuery = `SELECT COUNT(*)::int as count FROM orders o ${countJoin} ${whereClause}`;
@@ -204,7 +198,7 @@ export async function getOrders(options: ListOptions) {
   }
 
   let sortField = 'o.id';
-  if (options.sort && VALID_SORT_FIELDS.includes(options.sort)) {
+  if (options.sort && ORDER_SORT_FIELDS.includes(options.sort)) {
     sortField = `o.${options.sort}`;
   }
   const orderDir = options.order?.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
@@ -222,7 +216,7 @@ export async function getOrderById(id: string): Promise<Order | null> {
 
 export async function patchOrder(
   id: string,
-  updates: { status?: string; priority?: string; notes?: string }
+  updates: PatchOrderUpdates
 ): Promise<{ order: Order | null; error?: string; oldStatus?: string }> {
   if (patchLocks.has(id)) {
     return { order: null, error: 'Order is being updated' };
@@ -234,8 +228,8 @@ export async function patchOrder(
     if (!current) return { order: null, error: 'Order not found' };
     if (current.status === 'cancelled') return { order: null, error: 'Order is cancelled' };
 
-    if (updates.status && !VALID_STATUSES.includes(updates.status)) return { order: null, error: 'Invalid status' };
-    if (updates.priority && !VALID_PRIORITIES.includes(updates.priority)) return { order: null, error: 'Invalid priority' };
+    if (updates.status && !ORDER_STATUSES.includes(updates.status)) return { order: null, error: 'Invalid status' };
+    if (updates.priority && !ORDER_PRIORITIES.includes(updates.priority)) return { order: null, error: 'Invalid priority' };
 
     const newStatus = updates.status ?? current.status;
     const newPriority = updates.priority ?? current.priority;
@@ -310,8 +304,8 @@ export async function getOrderStats() {
     LEFT JOIN suppliers s ON o.supplier_id = s.id
     GROUP BY o.supplier_id, s.name
     ORDER BY total_revenue DESC
-    LIMIT 10
-  `);
+    LIMIT $1
+  `, [AGGREGATION.TOP_SUPPLIERS_LIMIT]);
   const top_suppliers = topSuppliersResult.rows.map((row) => ({
     supplier_id: row.supplier_id,
     supplier_name: row.supplier_name,

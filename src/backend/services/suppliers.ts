@@ -1,4 +1,5 @@
 import pool from '../db/pool.js';
+import { normalizeLimit, normalizeOffset, SUPPLIER_PERFORMANCE, TIME } from '../config/constants.js';
 
 interface Supplier {
   id: string;
@@ -12,20 +13,14 @@ interface Supplier {
   total_revenue?: number;
 }
 
-interface ListOptions {
-  limit?: number;
-  offset?: number;
+export interface ListSuppliersOptions {
+  limit: number;
+  offset: number;
 }
 
-function normalizeLimit(value?: number) {
-  if (!Number.isFinite(value as number) || value === undefined) return 20;
-  if (value < 0) return Math.min(Math.abs(value), 100);
-  return Math.min(value, 1000);
-}
-
-export async function getSuppliers(options: ListOptions) {
+export async function getSuppliers(options: ListSuppliersOptions) {
   const limit = normalizeLimit(options.limit);
-  const offset = Math.max(options.offset || 0, 0);
+  const offset = normalizeOffset(options.offset);
 
   const countResult = await pool.query('SELECT COUNT(*)::int as count FROM suppliers');
   const total = Number(countResult.rows[0].count);
@@ -63,12 +58,17 @@ export async function getSupplierPerformance(id: string) {
        COUNT(*)::int AS total_orders,
        COALESCE(AVG(total_price), 0)::float8 AS avg_order_value,
        COALESCE(SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END), 0)::float8 / NULLIF(COUNT(*), 0) AS rejection_rate,
-       COALESCE(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400) FILTER (WHERE status = 'delivered'), 0)::float8 AS avg_delivery_days,
-       COALESCE(SUM(CASE WHEN p.price IS NOT NULL AND o.unit_price BETWEEN p.price * 0.8 AND p.price * 1.2 THEN 1 ELSE 0 END), 0)::float8 / NULLIF(COUNT(*), 0) AS price_consistency
+       COALESCE(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / $4) FILTER (WHERE status = 'delivered'), 0)::float8 AS avg_delivery_days,
+       COALESCE(SUM(CASE WHEN p.price IS NOT NULL AND o.unit_price BETWEEN p.price * $2 AND p.price * $3 THEN 1 ELSE 0 END), 0)::float8 / NULLIF(COUNT(*), 0) AS price_consistency
      FROM orders o
      LEFT JOIN products p ON o.product_id = p.id
      WHERE o.supplier_id = $1`,
-    [id]
+    [
+      id,
+      SUPPLIER_PERFORMANCE.PRICE_CONSISTENCY_LOWER_MULTIPLIER,
+      SUPPLIER_PERFORMANCE.PRICE_CONSISTENCY_UPPER_MULTIPLIER,
+      TIME.SECONDS_PER_DAY,
+    ]
   );
 
   const trendResult = await pool.query(

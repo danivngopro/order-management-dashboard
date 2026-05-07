@@ -1,187 +1,150 @@
 import { Router, Request, Response } from 'express';
 import { getOrders, getOrderById, patchOrder, getOrderStats } from '../services/orders.js';
 import { getAnomalies } from '../services/anomalies.js';
-import { createBulkJob, getBulkJob } from '../services/bulk.js';
+import { createBulkJob } from '../services/bulk.js';
 import { sseManager } from '../realtime/sse.js';
+import { idParamSchema } from '../schemas/common.js';
+import {
+  bulkActionBodySchema,
+  bulkActionsBodySchema,
+  BulkActionBody,
+  BulkActionsBody,
+  listOrdersQuerySchema,
+  ListOrdersQuery,
+  patchOrderBodySchema,
+  PatchOrderBody,
+} from '../schemas/orders.js';
+import {
+  getValidatedBody,
+  getValidatedParams,
+  getValidatedQuery,
+  validateBody,
+  validateParams,
+  validateQuery,
+} from '../utils/validate.js';
+import { ERRORS, sendError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
 // GET /api/orders/stats - MUST come before /:id
-router.get('/stats', async (req: Request, res: Response) => {
+router.get('/stats', async (_req: Request, res: Response) => {
   try {
     const stats = await getOrderStats();
     res.json(stats);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message, code: 'INTERNAL_ERROR' });
+  } catch (err) {
+    logger.error('GET /api/orders/stats failed', { err });
+    sendError(res, ERRORS.internalError);
   }
 });
 
 // GET /api/orders/anomalies - MUST come before /:id
-router.get('/anomalies', async (req: Request, res: Response) => {
+router.get('/anomalies', async (_req: Request, res: Response) => {
   try {
     const anomalies = await getAnomalies();
     res.json({ data: anomalies });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message, code: 'INTERNAL_ERROR' });
+  } catch (err) {
+    logger.error('GET /api/orders/anomalies failed', { err });
+    sendError(res, ERRORS.internalError);
   }
 });
 
 // GET /api/orders
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', validateQuery(listOrdersQuerySchema), async (req: Request, res: Response) => {
   try {
-    const limit = req.query.limit ? Math.min(parseInt(req.query.limit as string), 1000) : 20;
-    const offset = req.query.offset ? Math.max(parseInt(req.query.offset as string), 0) : 0;
-
-    const data = await getOrders({
-      limit,
-      offset,
-      status: req.query.status as string,
-      priority: req.query.priority as string,
-      supplier_id: req.query.supplier_id as string,
-      warehouse: req.query.warehouse as string,
-      date_from: req.query.date_from as string,
-      date_to: req.query.date_to as string,
-      min_total: req.query.min_total ? parseFloat(req.query.min_total as string) : undefined,
-      search: req.query.search as string,
-      sort: req.query.sort as string,
-      order: req.query.order as string,
-    });
-
+    const query = getValidatedQuery<ListOrdersQuery>(req);
+    const data = await getOrders(query);
     res.json(data);
-  } catch (err: any) {
-    console.error('GET /api/orders error:', err);
-    res.status(400).json({ error: err.message, code: 'BAD_REQUEST' });
+  } catch (err) {
+    logger.error('GET /api/orders failed', { err });
+    sendError(res, ERRORS.badRequest);
   }
 });
 
 // GET /api/orders/:id
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
-    const order = await getOrderById(req.params.id);
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found', code: 'NOT_FOUND' });
-    }
+    const { id } = getValidatedParams<{ id: string }>(req);
+    const order = await getOrderById(id);
+    if (!order) return sendError(res, ERRORS.orderNotFound);
     res.json(order);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message, code: 'INTERNAL_ERROR' });
+  } catch (err) {
+    logger.error('GET /api/orders/:id failed', { err });
+    sendError(res, ERRORS.internalError);
   }
 });
 
 // PATCH /api/orders/:id
-router.patch('/:id', async (req: Request, res: Response) => {
-  try {
-    const { status, priority, notes } = req.body;
+router.patch(
+  '/:id',
+  validateParams(idParamSchema),
+  validateBody(patchOrderBodySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = getValidatedParams<{ id: string }>(req);
+      const body = getValidatedBody<PatchOrderBody>(req);
+      const result = await patchOrder(id, body);
 
-    // Validate status if provided
-    const VALID_STATUSES = ['pending', 'approved', 'rejected', 'shipped', 'delivered', 'cancelled'];
-    if (status && !VALID_STATUSES.includes(status)) {
-      return res.status(400).json({ error: 'Invalid status', code: 'INVALID_STATUS' });
-    }
+      if (result.error === 'Order is being updated') return sendError(res, ERRORS.orderUpdateConflict);
+      if (result.error === 'Order not found') return sendError(res, ERRORS.orderNotFound);
+      if (result.error === 'Order is cancelled') return sendError(res, ERRORS.cancelledOrderConflict);
+      if (result.error === 'Invalid status') return sendError(res, ERRORS.invalidStatus);
+      if (result.error === 'Invalid priority') return sendError(res, ERRORS.invalidPriority);
 
-    // Validate priority if provided
-    const VALID_PRIORITIES = ['low', 'medium', 'high', 'critical'];
-    if (priority && !VALID_PRIORITIES.includes(priority)) {
-      return res.status(400).json({ error: 'Invalid priority', code: 'INVALID_PRIORITY' });
-    }
+      if (body.status && result.order) {
+        sseManager.broadcastToSupplier(result.order.supplier_id, {
+          type: 'order_updated',
+          data: {
+            id: result.order.id,
+            old_status: result.oldStatus ?? 'unknown',
+            new_status: body.status,
+            updated_at: result.order.updated_at,
+          },
+        });
+      }
 
-    const result = await patchOrder(req.params.id, { status, priority, notes });
-
-    if (result.error === 'Order is being updated') {
-      return res.status(409).json({ error: 'Order is being updated', code: 'CONFLICT' });
+      res.json(result.order);
+    } catch (err) {
+      logger.error('PATCH /api/orders/:id failed', { err });
+      sendError(res, ERRORS.internalError);
     }
-    if (result.error === 'Order not found') {
-      return res.status(404).json({ error: 'Order not found', code: 'NOT_FOUND' });
-    }
-    if (result.error === 'Order is cancelled') {
-      return res.status(409).json({ error: 'Order is cancelled', code: 'CONFLICT' });
-    }
-    if (result.error === 'Invalid status' || result.error === 'Invalid priority') {
-      return res.status(400).json({ error: result.error, code: 'INVALID_VALUE' });
-    }
-
-    // Emit SSE event if status changed
-    if (status && result.order) {
-      sseManager.broadcastToSupplier(result.order.supplier_id, {
-        type: 'order_updated',
-        data: {
-          id: result.order.id,
-          old_status: result.oldStatus ?? 'unknown',
-          new_status: status,
-          updated_at: result.order.updated_at,
-        },
-      });
-    }
-
-    res.json(result.order);
-  } catch (err: any) {
-    console.error('PATCH /api/orders/:id error:', err);
-    res.status(500).json({ error: err.message, code: 'INTERNAL_ERROR' });
   }
-});
+);
+
+async function handleBulkAction(req: Request, res: Response, responseKey: 'jobId' | 'job_id') {
+  const body = getValidatedBody<BulkActionBody | BulkActionsBody>(req);
+  const orderIds = 'orderIds' in body ? body.orderIds : body.order_ids;
+  const jobId = await createBulkJob(orderIds, body.action, body.reason);
+  res.status(202).json({ [responseKey]: jobId });
+}
 
 // POST /api/orders/bulk-action
-router.post('/bulk-action', async (req: Request, res: Response) => {
+router.post('/bulk-action', validateBody(bulkActionBodySchema), async (req: Request, res: Response) => {
   try {
-    const { orderIds, action, reason } = req.body;
-
-    if (!Array.isArray(orderIds) || orderIds.length === 0) {
-      return res.status(400).json({ error: 'Empty orderIds', code: 'INVALID_INPUT' });
-    }
-    if (orderIds.length > 10000) {
-      return res.status(400).json({ error: 'Too many order IDs', code: 'TOO_MANY' });
-    }
-    if (!['approve', 'reject', 'flag'].includes(action)) {
-      return res.status(400).json({ error: 'Invalid action', code: 'INVALID_ACTION' });
-    }
-
-    const jobId = await createBulkJob(orderIds, action, reason);
-    res.status(202).json({ jobId });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message, code: 'BAD_REQUEST' });
+    await handleBulkAction(req, res, 'jobId');
+  } catch (err) {
+    logger.warn('POST /api/orders/bulk-action failed', { err });
+    sendError(res, ERRORS.badRequest);
   }
 });
 
-// POST /api/orders/bulk (same as bulk-action)
-router.post('/bulk', async (req: Request, res: Response) => {
+// POST /api/orders/bulk
+router.post('/bulk', validateBody(bulkActionBodySchema), async (req: Request, res: Response) => {
   try {
-    const { orderIds, action, reason } = req.body;
-
-    if (!Array.isArray(orderIds) || orderIds.length === 0) {
-      return res.status(400).json({ error: 'Empty orderIds', code: 'INVALID_INPUT' });
-    }
-    if (orderIds.length > 10000) {
-      return res.status(400).json({ error: 'Too many order IDs', code: 'TOO_MANY' });
-    }
-    if (!['approve', 'reject', 'flag'].includes(action)) {
-      return res.status(400).json({ error: 'Invalid action', code: 'INVALID_ACTION' });
-    }
-
-    const jobId = await createBulkJob(orderIds, action, reason);
-    res.status(202).json({ jobId });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message, code: 'BAD_REQUEST' });
+    await handleBulkAction(req, res, 'jobId');
+  } catch (err) {
+    logger.warn('POST /api/orders/bulk failed', { err });
+    sendError(res, ERRORS.badRequest);
   }
 });
 
 // POST /api/orders/bulk-actions
-router.post('/bulk-actions', async (req: Request, res: Response) => {
+router.post('/bulk-actions', validateBody(bulkActionsBodySchema), async (req: Request, res: Response) => {
   try {
-    const { order_ids, action, reason } = req.body;
-
-    if (!Array.isArray(order_ids) || order_ids.length === 0) {
-      return res.status(400).json({ error: 'Empty order_ids', code: 'INVALID_INPUT' });
-    }
-    if (order_ids.length > 10000) {
-      return res.status(400).json({ error: 'Too many order IDs', code: 'TOO_MANY' });
-    }
-    if (!['approve', 'reject', 'flag'].includes(action)) {
-      return res.status(400).json({ error: 'Invalid action', code: 'INVALID_ACTION' });
-    }
-
-    const job_id = await createBulkJob(order_ids, action, reason);
-    res.status(202).json({ job_id });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message, code: 'BAD_REQUEST' });
+    await handleBulkAction(req, res, 'job_id');
+  } catch (err) {
+    logger.warn('POST /api/orders/bulk-actions failed', { err });
+    sendError(res, ERRORS.badRequest);
   }
 });
 

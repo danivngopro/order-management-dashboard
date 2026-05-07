@@ -1,4 +1,5 @@
 import pool from '../db/pool.js';
+import { normalizeLimit, normalizeOffset } from '../config/constants.js';
 
 interface Product {
   id: string;
@@ -8,16 +9,10 @@ interface Product {
   price: number;
 }
 
-interface ListOptions {
-  limit?: number;
-  offset?: number;
+export interface ListProductsOptions {
+  limit: number;
+  offset: number;
   category?: string;
-}
-
-function normalizeLimit(value?: number) {
-  if (!Number.isFinite(value as number) || value === undefined) return 20;
-  if (value < 0) return Math.min(Math.abs(value), 100);
-  return Math.min(value, 1000);
 }
 
 const categoryCte = `
@@ -33,9 +28,9 @@ const categoryCte = `
   )
 `;
 
-export async function getProducts(options: ListOptions) {
+export async function getProducts(options: ListProductsOptions) {
   const limit = normalizeLimit(options.limit);
-  const offset = Math.max(options.offset || 0, 0);
+  const offset = normalizeOffset(options.offset);
 
   let total: number;
   let rows: Product[];

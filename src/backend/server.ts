@@ -1,11 +1,11 @@
 import { app } from './app.js';
+import { ENV } from './config/env.js';
 import { warmDefaultOrdersCache } from './services/orders.js';
+import { logger } from './utils/logger.js';
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+app.listen(ENV.PORT, () => {
+  logger.info(`Server listening on port ${ENV.PORT}`);
   warmDefaultOrdersCache().catch((err) => {
-    console.warn('Default orders cache warmup failed:', err?.message ?? err);
+    logger.warn('Default orders cache warmup failed', { err });
   });
 });

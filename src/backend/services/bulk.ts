@@ -1,6 +1,9 @@
 import pool from '../db/pool.js';
 import { sseManager } from '../realtime/sse.js';
 import { randomUUID } from 'crypto';
+import { BULK } from '../config/constants.js';
+import { BULK_ACTIONS, BulkAction } from '../config/domain.js';
+import { logger } from '../utils/logger.js';
 
 interface BulkJob {
   id: string;
@@ -10,12 +13,10 @@ interface BulkJob {
   failed: number;
 }
 
-const VALID_ACTIONS = ['approve', 'reject', 'flag'];
-
-export async function createBulkJob(orderIds: string[], action: string, reason?: string): Promise<string> {
+export async function createBulkJob(orderIds: string[], action: BulkAction, reason?: string): Promise<string> {
   if (!Array.isArray(orderIds) || orderIds.length === 0) throw new Error('Empty orderIds');
-  if (orderIds.length > 10000) throw new Error('Too many order IDs');
-  if (!VALID_ACTIONS.includes(action)) throw new Error('Invalid action');
+  if (orderIds.length > BULK.MAX_IDS) throw new Error('Too many order IDs');
+  if (!BULK_ACTIONS.includes(action)) throw new Error('Invalid action');
 
   const jobId = randomUUID();
   await pool.query(
@@ -25,22 +26,21 @@ export async function createBulkJob(orderIds: string[], action: string, reason?:
   );
 
   setImmediate(() => {
-    processBulkJob(jobId, orderIds, action).catch((err) => {
-      console.error('Bulk job processing error:', err);
+    processBulkJob(jobId, orderIds, action, reason).catch((err) => {
+      logger.error('Bulk job processing error', { jobId, err });
     });
   });
 
   return jobId;
 }
 
-async function processBulkJob(jobId: string, orderIds: string[], action: string) {
+async function processBulkJob(jobId: string, orderIds: string[], action: BulkAction, _reason?: string) {
   let completed = 0;
   let failed = 0;
-  const batchSize = 250;
 
   try {
-    for (let i = 0; i < orderIds.length; i += batchSize) {
-      const batch = orderIds.slice(i, i + batchSize);
+    for (let i = 0; i < orderIds.length; i += BULK.PROCESS_BATCH_SIZE) {
+      const batch = orderIds.slice(i, i + BULK.PROCESS_BATCH_SIZE);
 
       for (const orderId of batch) {
         try {
@@ -84,7 +84,8 @@ async function processBulkJob(jobId: string, orderIds: string[], action: string)
     );
 
     sseManager.broadcast({ type: 'bulk_completed', data: { jobId } });
-  } catch (err: any) {
+  } catch (err) {
+    logger.error('Bulk job failed', { jobId, err });
     await pool.query(
       'UPDATE bulk_jobs SET status = $1, completed = $2, failed = $3, updated_at = now() WHERE id = $4',
       ['failed', completed, failed, jobId]

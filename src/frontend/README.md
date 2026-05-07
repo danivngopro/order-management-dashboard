@@ -1,270 +1,318 @@
-# Order Management Dashboard Frontend
+# Frontend README
 
-A modern React + TypeScript frontend for the procurement order-management dashboard built with Vite.
+## Overview
 
-## 📁 Project Structure
+This is the React + TypeScript frontend for the Procurement Order Management Dashboard.
 
+The frontend provides a clean dashboard interface for:
+
+- browsing and filtering procurement orders
+- performing bulk order actions
+- viewing analytics and operational metrics
+- drilling into supplier performance
+- monitoring loading, error, and empty states across views
+
+The frontend consumes the existing backend API under `/api`. The backend must be running on port `3000`.
+
+## Tech Stack
+
+- React
+- TypeScript
+- Vite
+- Recharts
+- Plain CSS
+
+The UI intentionally avoids heavy styling frameworks to keep the project simple, readable, and easy to review.
+
+## Location
+
+The frontend lives under:
+
+```text
+src/frontend
 ```
-src/frontend/
-├── src/
-│   ├── main.tsx              # React app entry point
-│   ├── App.tsx               # Main app component with navigation
-│   ├── api.ts                # API client wrapper
-│   ├── types.ts              # TypeScript interfaces
-│   ├── index.css             # Global styles
-│   ├── views/
-│   │   ├── OrdersTable.tsx   # Orders view with filters & bulk actions
-│   │   ├── AnalyticsDashboard.tsx  # Dashboard with charts
-│   │   └── SupplierDetail.tsx      # Supplier detail view
-│   └── components/
-│       ├── BulkActionModal.tsx     # Confirmation modal for bulk actions
-│       └── BulkProgressModal.tsx   # Progress display for bulk jobs
-├── index.html                # HTML entry point
-├── vite.config.ts            # Vite configuration
-├── tsconfig.json             # TypeScript config
-├── tsconfig.node.json        # TypeScript config for Vite
-└── package.json              # Frontend dependencies
-```
 
-## 🚀 Quick Start
+## Running the Project
 
-### Prerequisites
+### 1. Start infrastructure
 
-- Node.js 16+ and npm installed
-- Backend API running on `http://localhost:3000`
-- PostgreSQL and Redis running (via Docker)
-
-### 1. Install dependencies
+From the project root:
 
 ```bash
-# Root level - install backend dependencies
-npm install
+docker compose up -d
+```
 
-# Install frontend dependencies
+This starts the PostgreSQL/Redis services provided by the assignment.
+
+### 2. Seed the database
+
+From the project root:
+
+```bash
+npm run seed
+```
+
+### 3. Start the backend
+
+From the project root:
+
+```bash
+npm run dev
+```
+
+The backend runs at:
+
+```text
+http://localhost:3000
+```
+
+### 4. Start the frontend
+
+From the project root:
+
+```bash
+npm run dev:frontend
+```
+
+Or directly from the frontend directory:
+
+```bash
 cd src/frontend
 npm install
-cd ../..
-```
-
-### 2. Start services
-
-```bash
-# Terminal 1: Start PostgreSQL & Redis
-docker-compose up -d
-
-# Terminal 2: Seed the database
-npm run seed
-
-# Terminal 3: Start the backend API
 npm run dev
-# Backend will be at http://localhost:3000
 ```
 
-### 3. Start the frontend
+The frontend runs at Vite's default local URL:
 
-```bash
-# Terminal 4: Start the frontend dev server
-npm run dev:frontend
-# Frontend will be at http://localhost:5173
+```text
+http://localhost:5173
 ```
 
-The frontend will automatically proxy API calls to the backend at `http://localhost:3000`.
+## Build
 
-## 📦 Build for Production
+From the project root:
 
 ```bash
-# Build the frontend
 npm run build:frontend
-
-# Output: src/frontend/dist/
 ```
 
-## 🧪 Running Tests
-
-After starting the backend and seeding the database, run the test suite:
+Or directly from the frontend directory:
 
 ```bash
-cd tests
-npm install
-npm test
+cd src/frontend
+npm run build
 ```
 
-## 📊 Frontend Features
+## Frontend Scripts
 
-### 1. **Orders Table** (`/views/OrdersTable.tsx`)
+The root project includes frontend helper scripts:
 
-- **Pagination**: Server-side pagination with 20 orders per page
-- **Filtering**: Status, priority, supplier, warehouse, date range, text search
-- **Sorting**: Click column headers to sort by ID, quantity, total price, or date
-- **Multi-select**: Checkbox to select multiple orders
-- **Bulk Actions**: Approve, reject, or flag selected orders in one operation
-- **Job Tracking**: Real-time progress display with polling every 500ms
-- **States**: Loading spinner, error messages, empty state
-
-### 2. **Analytics Dashboard** (`/views/AnalyticsDashboard.tsx`)
-
-- **Summary Cards**: Total orders, total revenue, average order value
-- **Monthly Trend**: Line chart of order volume over time
-- **Status Distribution**: Pie chart showing order counts by status
-- **Warehouse Distribution**: Bar chart of orders per warehouse
-- **Top Suppliers**: Bar chart and table of suppliers by revenue
-- **Interactive**: Click supplier names to view details
-- **Charts**: Built with Recharts for lightweight, responsive visualizations
-
-### 3. **Supplier Detail** (`/views/SupplierDetail.tsx`)
-
-- **Supplier Info**: Name, email, country, rating, active status
-- **Performance Metrics**:
-  - Total orders and revenue
-  - Average delivery days
-  - Rejection rate
-  - Price consistency
-  - Average order value
-- **Monthly Trend**: Line chart of order volume from this supplier
-- **Order History**: Paginated table of all orders from the supplier
-- **Navigation**: Back button to return to orders table
-
-### 4. **Navigation**
-
-- Sidebar with links to Orders, Analytics, and Supplier views
-- Active link highlighting
-- Responsive layout (sidebar converts to top nav on mobile)
-
-## 🛠️ Technology Stack
-
-- **React 18**: UI library
-- **TypeScript**: Type-safe JavaScript
-- **Vite**: Lightning-fast build tool
-- **Recharts**: Lightweight charting library
-- **CSS**: Plain CSS with CSS modules pattern (no build tool needed)
-
-## 🎨 Styling
-
-The frontend uses a professional dashboard design with:
-
-- Clean, readable typography
-- Consistent color scheme and spacing
-- Responsive grid layout
-- Status badges with semantic colors
-- Hover effects and transitions
-- Dark sidebar with light content area
-- Mobile-responsive design
-
-All styles are in `src/index.css` - no external UI framework needed.
-
-## 🔌 API Client
-
-The `api.ts` module provides a simple, typed wrapper around the backend API:
-
-```typescript
-import { apiClient } from "./api";
-
-// Get paginated orders with filters
-const result = await apiClient.getOrders({
-  limit: 20,
-  offset: 0,
-  status: "pending",
-  priority: "high",
-});
-
-// Get supplier details
-const supplier = await apiClient.getSupplierById("sup_001");
-
-// Bulk action
-const job = await apiClient.bulkAction({
-  orderIds: ["ord_1", "ord_2"],
-  action: "approve",
-  reason: "Auto-approved",
-});
-
-// Poll job status
-const jobStatus = await apiClient.getJobStatus(job.jobId);
+```bash
+npm run dev:frontend
+npm run build:frontend
+npm run preview:frontend
 ```
 
-## 🧩 Component Architecture
+Inside `src/frontend`, the local scripts are:
 
-All views follow a consistent pattern:
+```bash
+npm run dev
+npm run build
+npm run preview
+```
 
-1. **State Management**: `useState` for local state, no external store needed
-2. **Data Loading**: `useEffect` to fetch data on mount
-3. **Error Handling**: Try/catch with user-friendly error messages
-4. **Loading States**: Spinner while fetching data
-5. **Empty States**: Message when no results found
+## Project Structure
 
-No Redux, Zustand, or Context API needed - the component structure is simple enough for `useState`/`useEffect`.
+```text
+src/frontend/
+  index.html
+  package.json
+  vite.config.ts
+  tsconfig.json
+  tsconfig.node.json
 
-## 🚨 Error Handling
+  src/
+    main.tsx
+    App.tsx
+    api.ts
+    types.ts
+    utils/
+      formatting.ts
+    components/
+      BulkActionModal.tsx
+      BulkProgressModal.tsx
+    views/
+      OrdersTable.tsx
+      AnalyticsDashboard.tsx
+      SupplierDetail.tsx
+    index.css
+```
 
-All views properly handle:
+## Main Views
 
-- **Loading**: Shows spinner while fetching
-- **Errors**: Displays error message to user
-- **Empty Results**: Shows empty state message
-- **Failed Bulk Actions**: Displays failed job status
+### Orders Table
 
-## ♿ Accessibility
+The Orders view allows users to browse procurement orders with server-side pagination.
 
-- Semantic HTML elements
-- Proper form labels
-- Keyboard navigation support
-- Color contrast meets WCAG standards
-- Focus states on interactive elements
+Features:
 
-## 🔐 Security
+- paginated table
+- server-side filters
+- status filter
+- priority filter
+- supplier autocomplete
+- warehouse selector
+- date range filters
+- text search
+- sortable columns
+- multi-select rows
+- bulk approve/reject/flag actions
+- job progress polling after bulk actions
+- loading, error, and empty states
 
-- No mock data mixed with real API data
-- Input validation through type checking
-- No client-side authentication (backend handles auth)
-- API responses validated via TypeScript types
+The supplier filter is user-friendly: users select by supplier name, while the API receives the supplier ID.
 
-## 📱 Responsive Design
+The warehouse filter uses selectable values instead of requiring the user to type exact backend values such as `warehouse_south`.
 
-- Works on desktop, tablet, and mobile
-- Sidebar toggles layout on smaller screens
-- Tables scroll horizontally on mobile
-- Filters stack vertically on small screens
+### Analytics Dashboard
 
-## 🐛 Debugging
+The Analytics Dashboard consumes:
 
-View the browser console for:
+```text
+GET /api/orders/stats
+```
 
-- API responses and errors
-- React warnings during development
-- State changes
+It displays:
 
-The frontend communicates with the backend at `http://localhost:3000/api`.
+- total orders
+- total revenue
+- average order value
+- monthly order volume
+- status distribution
+- top suppliers by revenue
+- warehouse distribution
 
-## 📚 Key Files Reference
+The dashboard transforms backend response shapes into chart-friendly arrays where needed. For example, status data may arrive as an object keyed by status, so the frontend converts it into an array before passing it to Recharts.
 
-| File                               | Purpose                                   |
-| ---------------------------------- | ----------------------------------------- |
-| `src/App.tsx`                      | Main app component with navigation        |
-| `src/api.ts`                       | API client wrapper for all backend calls  |
-| `src/types.ts`                     | TypeScript interfaces for API data        |
-| `src/views/OrdersTable.tsx`        | Orders view with all filtering/pagination |
-| `src/views/AnalyticsDashboard.tsx` | Dashboard with charts and metrics         |
-| `src/views/SupplierDetail.tsx`     | Supplier profile and order history        |
-| `src/index.css`                    | All CSS styles (no external framework)    |
+### Supplier Detail
 
-## ✅ Checklist
+The Supplier Detail view is opened by clicking supplier names in the dashboard or order-related views.
 
-- [x] React + TypeScript with Vite
-- [x] Orders table with pagination, filters, sorting
-- [x] Multi-select and bulk actions
-- [x] Bulk job progress tracking
-- [x] Analytics dashboard with charts
-- [x] Supplier detail view
-- [x] Loading, error, empty states everywhere
-- [x] Professional, responsive UI
-- [x] Simple component architecture
-- [x] No authentication required
-- [x] API client wrapper
-- [x] No external UI framework (plain CSS)
+It consumes:
 
-## 🎯 Next Steps
+```text
+GET /api/suppliers/:id
+GET /api/suppliers/:id/performance
+GET /api/orders?supplier_id=:id
+```
 
-1. Install dependencies: `cd src/frontend && npm install`
-2. Start backend: `npm run dev` (from root)
-3. Start frontend: `npm run dev:frontend` (from root)
-4. Open `http://localhost:5173` in your browser
-5. Run tests: `cd tests && npm test`
+It displays:
+
+- supplier profile details
+- active/inactive state
+- order count
+- total revenue
+- average delivery days
+- rejection rate
+- average order value
+- price consistency
+- monthly trend chart
+- supplier order history
+
+A Supplier Detail navigation item appears only after a supplier has been selected.
+
+## API Integration
+
+The frontend uses a small typed API client in:
+
+```text
+src/frontend/src/api.ts
+```
+
+The API client wraps backend requests and centralizes URL/query construction.
+
+Key endpoints used:
+
+```text
+GET    /api/orders
+GET    /api/orders/:id
+PATCH  /api/orders/:id
+
+GET    /api/suppliers
+GET    /api/suppliers/:id
+GET    /api/suppliers/:id/performance
+
+GET    /api/products
+GET    /api/orders/stats
+
+POST   /api/orders/bulk-action
+GET    /api/jobs/:id
+```
+
+## Formatting
+
+Common formatting helpers live under:
+
+```text
+src/frontend/src/utils/formatting.ts
+```
+
+These helpers keep the UI consistent for:
+
+- currency
+- large numbers
+- percentages
+- dates
+- status labels
+- warehouse labels
+
+Examples:
+
+```text
+$230,810,064.99
+50,000
+64.9%
+warehouse_south -> South
+```
+
+## State Handling
+
+Each main view handles:
+
+- loading states
+- error states
+- empty states
+
+Charts also show a friendly placeholder when there is no usable data instead of rendering an empty or broken chart.
+
+## Bulk Actions
+
+Bulk actions are handled from the Orders table.
+
+Flow:
+
+1. User selects one or more orders.
+2. User chooses an action: approve, reject, or flag.
+3. Confirmation modal opens.
+4. Frontend sends request to:
+
+```text
+POST /api/orders/bulk-action
+```
+
+5. Backend returns a `jobId`.
+6. Frontend polls:
+
+```text
+GET /api/jobs/:id
+```
+
+7. Progress modal updates until the job completes or fails.
+
+## Notes and Tradeoffs
+
+- The frontend is intentionally a single-page Vite app rather than a separately containerized service.
+- The backend remains the source of truth for filtering, sorting, pagination, aggregation, and bulk processing.
+- Client state is managed with React `useState` and `useEffect`, which is sufficient for this project size.
+- No authentication is implemented because it is outside the assignment scope.
+- The frontend does not modify backend behavior or database schema.
