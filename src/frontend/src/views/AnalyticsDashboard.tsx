@@ -1,7 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api";
 import { OrderStats } from "../types";
-import { formatCurrency, formatNumber, formatPercent } from "../utils";
+import {
+  formatCompactCurrency,
+  formatCurrency,
+  formatNumber,
+  formatWarehouse,
+  toNumber,
+} from "../utils";
 import {
   BarChart,
   Bar,
@@ -20,6 +26,26 @@ import {
 
 interface AnalyticsDashboardProps {
   onViewSupplier: (supplierId: string) => void;
+}
+
+const COLORS = [
+  "#3498db",
+  "#27ae60",
+  "#e74c3c",
+  "#f39c12",
+  "#9b59b6",
+  "#1abc9c",
+  "#e67e22",
+  "#34495e",
+];
+
+function ChartEmpty({ label }: { label: string }) {
+  return (
+    <div className="empty-state chart-empty">
+      <div className="empty-state-icon">📊</div>
+      <p>{label}</p>
+    </div>
+  );
 }
 
 export default function AnalyticsDashboard({
@@ -45,6 +71,46 @@ export default function AnalyticsDashboard({
       setLoading(false);
     }
   }
+
+  const chartData = useMemo(() => {
+    if (!stats) {
+      return {
+        statusData: [],
+        monthlyData: [],
+        warehouseData: [],
+        suppliersData: [],
+      };
+    }
+
+    const statusData = Object.entries(stats.by_status || {}).map(
+      ([status, values]) => ({
+        status,
+        count: toNumber(values?.count),
+        totalValue: toNumber(values?.total_value),
+      }),
+    );
+
+    const monthlyData = (stats.by_month || []).map((entry) => ({
+      month: entry.month,
+      orders: toNumber(entry.order_count),
+      revenue: toNumber(entry.revenue),
+    }));
+
+    const warehouseData = (stats.by_warehouse || []).map((entry) => ({
+      warehouse: formatWarehouse(entry.warehouse),
+      rawWarehouse: entry.warehouse,
+      orders: toNumber(entry.count),
+      revenue: toNumber(entry.total_value),
+    }));
+
+    const suppliersData = (stats.top_suppliers || []).map((supplier) => ({
+      supplierId: supplier.supplier_id,
+      supplierName: supplier.supplier_name,
+      revenue: toNumber(supplier.total_revenue),
+    }));
+
+    return { statusData, monthlyData, warehouseData, suppliersData };
+  }, [stats]);
 
   if (loading) {
     return (
@@ -74,42 +140,10 @@ export default function AnalyticsDashboard({
     );
   }
 
-  // Prepare chart data
-  const statusData = Object.entries(stats.by_status).map(([status, data]) => ({
-    name: status,
-    value: data.count,
-  }));
-
-  const monthlyData = (stats.by_month || []).map((entry) => ({
-    month: entry.month,
-    count: entry.order_count,
-  }));
-
-  const warehouseData = (stats.by_warehouse || []).map((entry) => ({
-    name: entry.warehouse,
-    value: entry.count,
-  }));
-
-  const suppliersData = (stats.top_suppliers || []).map((s) => ({
-    supplier_id: s.supplier_id,
-    supplier_name: s.supplier_name,
-    revenue: s.total_revenue,
-  }));
-
-  const COLORS = [
-    "#3498db",
-    "#27ae60",
-    "#e74c3c",
-    "#f39c12",
-    "#9b59b6",
-    "#1abc9c",
-    "#e67e22",
-    "#34495e",
-  ];
+  const { statusData, monthlyData, warehouseData, suppliersData } = chartData;
 
   return (
     <div>
-      {/* Summary Cards */}
       <div className="summary-cards">
         <div className="summary-card">
           <div className="summary-card-label">Total Orders</div>
@@ -120,7 +154,7 @@ export default function AnalyticsDashboard({
         <div className="summary-card revenue">
           <div className="summary-card-label">Total Revenue</div>
           <div className="summary-card-value">
-            {formatCurrency(stats.total_revenue)}
+            {formatCompactCurrency(stats.total_revenue)}
           </div>
         </div>
         <div className="summary-card average">
@@ -131,164 +165,144 @@ export default function AnalyticsDashboard({
         </div>
       </div>
 
-      {/* Monthly Trend */}
-      {monthlyData.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <h3 className="card-title">Monthly Order Volume</h3>
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={monthlyData}>
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Monthly Order Volume</h3>
+        </div>
+        {monthlyData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={monthlyData} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
-              <YAxis />
+              <YAxis tickFormatter={(value) => formatNumber(value)} />
               <Tooltip
-                formatter={(value) => formatNumber(value as number)}
+                formatter={(value, name) => [
+                  name === "Revenue" ? formatCurrency(value) : formatNumber(value),
+                  name,
+                ]}
                 labelFormatter={(label) => `Month: ${label}`}
               />
               <Legend />
               <Line
                 type="monotone"
-                dataKey="count"
+                dataKey="orders"
                 stroke="#3498db"
                 strokeWidth={2}
-                dot={{ r: 4 }}
+                dot={{ r: 3 }}
                 name="Orders"
               />
             </LineChart>
           </ResponsiveContainer>
-        </div>
-      )}
+        ) : (
+          <ChartEmpty label="No monthly order data available" />
+        )}
+      </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        {/* Status Distribution */}
-        {statusData.length > 0 ? (
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Orders by Status</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
+      <div className="chart-grid">
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">Orders by Status</h3>
+          </div>
+          {statusData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
               <PieChart>
                 <Pie
                   data={statusData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={(entry) =>
-                    `${entry.name}: ${formatNumber(entry.value)}`
-                  }
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
+                  label={({ status, count }) => `${status}: ${formatNumber(count)}`}
+                  outerRadius={95}
+                  dataKey="count"
+                  nameKey="status"
                 >
-                  {statusData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
+                  {statusData.map((_, index) => (
+                    <Cell key={`status-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => formatNumber(value as number)} />
+                <Tooltip formatter={(value) => formatNumber(value)} />
               </PieChart>
             </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="card">
-            <div className="empty-state" style={{ padding: "40px 20px" }}>
-              <p>No status data available</p>
-            </div>
-          </div>
-        )}
+          ) : (
+            <ChartEmpty label="No status data available" />
+          )}
+        </div>
 
-        {/* Warehouse Distribution */}
-        {warehouseData.length > 0 ? (
-          <div className="card">
-            <div className="card-header">
-              <h3 className="card-title">Orders by Warehouse</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={warehouseData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="name"
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                />
-                <YAxis />
-                <Tooltip formatter={(value) => formatNumber(value as number)} />
-                <Bar dataKey="value" fill="#3498db" name="Orders" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="card">
-            <div className="empty-state" style={{ padding: "40px 20px" }}>
-              <p>No warehouse data available</p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Top Suppliers */}
-      {suppliersData.length > 0 && (
         <div className="card">
           <div className="card-header">
-            <h3 className="card-title">Top Suppliers by Revenue</h3>
+            <h3 className="card-title">Orders by Warehouse</h3>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart
-              data={suppliersData}
-              layout="vertical"
-              margin={{ top: 5, right: 30, left: 200, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                type="number"
-                formatter={(value) => formatCurrency(value as number)}
-              />
-              <YAxis dataKey="supplier_name" type="category" width={190} />
-              <Tooltip formatter={(value) => formatCurrency(value as number)} />
-              <Bar dataKey="revenue" fill="#27ae60" name="Revenue" />
-            </BarChart>
-          </ResponsiveContainer>
-
-          {/* Supplier details table */}
-          <div style={{ marginTop: "20px" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Supplier</th>
-                  <th>Total Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {suppliersData.map((supplier) => (
-                  <tr key={supplier.supplier_id}>
-                    <td>
-                      <button
-                        onClick={() => onViewSupplier(supplier.supplier_id)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "#3498db",
-                          cursor: "pointer",
-                          textDecoration: "underline",
-                          padding: 0,
-                          font: "inherit",
-                        }}
-                      >
-                        {supplier.supplier_name}
-                      </button>
-                    </td>
-                    <td>{formatCurrency(supplier.revenue)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {warehouseData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={warehouseData} margin={{ top: 8, right: 24, left: 8, bottom: 48 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="warehouse" angle={-35} textAnchor="end" interval={0} height={70} />
+                <YAxis tickFormatter={(value) => formatNumber(value)} />
+                <Tooltip
+                  formatter={(value, name) => [
+                    name === "Revenue" ? formatCurrency(value) : formatNumber(value),
+                    name,
+                  ]}
+                />
+                <Bar dataKey="orders" fill="#3498db" name="Orders" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <ChartEmpty label="No warehouse data available" />
+          )}
         </div>
-      )}
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Top Suppliers by Revenue</h3>
+        </div>
+        {suppliersData.length > 0 ? (
+          <>
+            <ResponsiveContainer width="100%" height={360}>
+              <BarChart
+                data={suppliersData}
+                layout="vertical"
+                margin={{ top: 5, right: 32, left: 190, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" tickFormatter={(value) => formatCompactCurrency(value)} />
+                <YAxis dataKey="supplierName" type="category" width={180} />
+                <Tooltip formatter={(value) => formatCurrency(value)} />
+                <Bar dataKey="revenue" fill="#27ae60" name="Revenue" />
+              </BarChart>
+            </ResponsiveContainer>
+
+            <div className="table-scroll" style={{ marginTop: 20 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Supplier</th>
+                    <th>Total Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {suppliersData.map((supplier) => (
+                    <tr key={supplier.supplierId}>
+                      <td>
+                        <button
+                          className="link-button"
+                          onClick={() => onViewSupplier(supplier.supplierId)}
+                        >
+                          {supplier.supplierName}
+                        </button>
+                      </td>
+                      <td>{formatCurrency(supplier.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <ChartEmpty label="No supplier revenue data available" />
+        )}
+      </div>
     </div>
   );
 }
