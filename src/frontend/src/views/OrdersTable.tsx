@@ -3,7 +3,7 @@ import { apiClient } from "../api";
 import { Order, OrderStatus, OrderPriority, Supplier } from "../types";
 import BulkProgressModal from "../components/BulkProgressModal";
 import BulkActionModal from "../components/BulkActionModal";
-import { formatCurrency, formatDate, formatNumber, formatWarehouse } from "../utils";
+import { formatCurrency, formatNumber } from "../utils";
 
 interface OrdersTableProps {
   onViewSupplier: (supplierId: string) => void;
@@ -110,7 +110,7 @@ export default function OrdersTable({ onViewSupplier }: OrdersTableProps) {
   async function loadWarehouses() {
     try {
       const stats = await apiClient.getOrderStats();
-      const warehouseList = Array.from(new Set((stats.by_warehouse || []).map((w) => w.warehouse).filter(Boolean))).sort();
+      const warehouseList = (stats.by_warehouse || []).map((w) => w.warehouse);
       setWarehouses(warehouseList);
     } catch (err) {
       console.error("Failed to load warehouses:", err);
@@ -160,7 +160,6 @@ export default function OrdersTable({ onViewSupplier }: OrdersTableProps) {
       date_to: "",
       search: "",
     });
-    setSupplierSearch("");
     setOffset(0);
     setSortBy("created_at");
     setSortOrder("desc");
@@ -291,29 +290,22 @@ export default function OrdersTable({ onViewSupplier }: OrdersTableProps) {
                 </select>
               </div>
 
-              <div className="filter-group filter-wide">
+              <div className="filter-group">
                 <label>Supplier</label>
-                <input
-                  list="supplier-options"
-                  value={supplierSearch}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSupplierSearch(value);
-                    const match = suppliers.find(
-                      (s) => s.name === value || s.id === value,
-                    );
-                    handleFilterChange("supplier_id", match ? match.id : "");
-                  }}
-                  placeholder={suppliersLoading ? "Loading suppliers..." : "Search supplier by name"}
+                <select
+                  value={filters.supplier_id}
+                  onChange={(e) =>
+                    handleFilterChange("supplier_id", e.target.value)
+                  }
                   disabled={suppliersLoading}
-                />
-                <datalist id="supplier-options">
+                >
+                  <option value="">All Suppliers</option>
                   {suppliers.map((supplier) => (
-                    <option key={supplier.id} value={supplier.name}>
-                      {supplier.id}
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.name}
                     </option>
                   ))}
-                </datalist>
+                </select>
               </div>
 
               <div className="filter-group">
@@ -327,7 +319,7 @@ export default function OrdersTable({ onViewSupplier }: OrdersTableProps) {
                   <option value="">All Warehouses</option>
                   {warehouses.map((warehouse) => (
                     <option key={warehouse} value={warehouse}>
-                      {formatWarehouse(warehouse)}
+                      {warehouse}
                     </option>
                   ))}
                 </select>
@@ -518,9 +510,9 @@ export default function OrdersTable({ onViewSupplier }: OrdersTableProps) {
                         </span>
                       </td>
                       <td style={{ fontSize: "13px" }}>
-                        {formatDate(order.created_at)}
+                        {new Date(order.created_at).toLocaleDateString()}
                       </td>
-                      <td>{formatWarehouse(order.warehouse)}</td>
+                      <td>{order.warehouse || "—"}</td>
                     </tr>
                   ))}
                 </tbody>

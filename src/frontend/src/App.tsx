@@ -1,10 +1,9 @@
 import { useState } from "react";
 import OrdersTable from "./views/OrdersTable";
 import AnalyticsDashboard from "./views/AnalyticsDashboard";
-import SuppliersTable from "./views/SuppliersTable";
 import SupplierDetail from "./views/SupplierDetail";
 
-type View = "orders" | "analytics" | "suppliers" | "supplier";
+type View = "orders" | "analytics" | "supplier";
 
 function App() {
   const [currentView, setCurrentView] = useState<View>("orders");
@@ -44,16 +43,6 @@ function App() {
               Analytics
             </button>
           </li>
-          <li>
-            <button
-              className={`nav-link ${
-                currentView === "suppliers" ? "active" : ""
-              }`}
-              onClick={() => setCurrentView("suppliers")}
-            >
-              Suppliers
-            </button>
-          </li>
           {selectedSupplierId && (
             <li>
               <button
@@ -88,17 +77,6 @@ function App() {
             </header>
             <div className="content">
               <AnalyticsDashboard onViewSupplier={handleViewSupplier} />
-            </div>
-          </>
-        )}
-
-        {currentView === "suppliers" && (
-          <>
-            <header className="header">
-              <h2>Suppliers</h2>
-            </header>
-            <div className="content">
-              <SuppliersTable onViewSupplier={handleViewSupplier} />
             </div>
           </>
         )}

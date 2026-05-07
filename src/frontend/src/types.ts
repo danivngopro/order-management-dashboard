@@ -58,42 +58,36 @@ export interface Product {
   price: number;
 }
 
-export interface StatusStats {
-  count: number;
-  total_value: number;
-}
-
-export interface MonthlyStats {
-  month: string;
-  order_count: number;
-  revenue: number;
-}
-
-export interface WarehouseStats {
-  warehouse: string;
-  count: number;
-  total_value: number;
-}
-
-export interface TopSupplierStats {
-  supplier_id: string;
-  supplier_name: string;
-  total_revenue: number;
-}
-
 export interface OrderStats {
   total_orders: number;
   total_revenue: number;
   avg_order_value: number;
-  by_status: Record<string, StatusStats>;
-  by_month: MonthlyStats[];
-  top_suppliers: TopSupplierStats[];
-  by_warehouse: WarehouseStats[];
+  by_status: Record<
+    OrderStatus,
+    {
+      count: number;
+      total_value: number;
+    }
+  >;
+  by_month: Array<{
+    month: string;
+    order_count: number;
+    revenue: number;
+  }>;
+  top_suppliers: Array<{
+    supplier_id: string;
+    supplier_name: string;
+    total_revenue: number;
+  }>;
+  by_warehouse: Array<{
+    warehouse: string;
+    count: number;
+    total_value: number;
+  }>;
 }
 
 export interface BulkActionJob {
   jobId?: string;
-  job_id?: string;
   status: "processing" | "completed" | "failed";
   progress: {
     total: number;
