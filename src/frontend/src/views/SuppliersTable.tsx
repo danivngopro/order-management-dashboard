@@ -7,7 +7,9 @@ interface SuppliersTableProps {
   onViewSupplier: (supplierId: string) => void;
 }
 
-export default function SuppliersTable({ onViewSupplier }: SuppliersTableProps) {
+export default function SuppliersTable({
+  onViewSupplier,
+}: SuppliersTableProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export default function SuppliersTable({ onViewSupplier }: SuppliersTableProps) 
           (s) =>
             s.name.toLowerCase().includes(term) ||
             s.email.toLowerCase().includes(term) ||
-            s.country.toLowerCase().includes(term)
+            s.country.toLowerCase().includes(term),
         );
       }
 

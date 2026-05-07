@@ -203,7 +203,9 @@ export default function SupplierDetail({ supplierId }: SupplierDetailProps) {
       )}
 
       {/* Monthly Trend */}
-      {performance && performance.monthly_trend && performance.monthly_trend.length > 0 ? (
+      {performance &&
+      performance.monthly_trend &&
+      performance.monthly_trend.length > 0 ? (
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Order Volume Trend</h3>

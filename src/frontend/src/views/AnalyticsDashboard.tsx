@@ -174,7 +174,9 @@ export default function AnalyticsDashboard({
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={(entry) => `${entry.name}: ${formatNumber(entry.value)}`}
+                  label={(entry) =>
+                    `${entry.name}: ${formatNumber(entry.value)}`
+                  }
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
@@ -214,9 +216,7 @@ export default function AnalyticsDashboard({
                   height={80}
                 />
                 <YAxis />
-                <Tooltip
-                  formatter={(value) => formatNumber(value as number)}
-                />
+                <Tooltip formatter={(value) => formatNumber(value as number)} />
                 <Bar dataKey="value" fill="#3498db" name="Orders" />
               </BarChart>
             </ResponsiveContainer>
@@ -243,7 +243,10 @@ export default function AnalyticsDashboard({
               margin={{ top: 5, right: 30, left: 200, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" formatter={(value) => formatCurrency(value as number)} />
+              <XAxis
+                type="number"
+                formatter={(value) => formatCurrency(value as number)}
+              />
               <YAxis dataKey="supplier_name" type="category" width={190} />
               <Tooltip formatter={(value) => formatCurrency(value as number)} />
               <Bar dataKey="revenue" fill="#27ae60" name="Revenue" />

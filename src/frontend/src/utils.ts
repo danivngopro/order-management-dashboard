@@ -26,7 +26,10 @@ export const formatPercent = (value: number): string => {
   return percentFormatter.format(value);
 };
 
-export const formatMetric = (value: number, type: "number" | "currency" | "percent" = "number"): string => {
+export const formatMetric = (
+  value: number,
+  type: "number" | "currency" | "percent" = "number",
+): string => {
   switch (type) {
     case "currency":
       return formatCurrency(value);
